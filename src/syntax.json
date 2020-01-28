@@ -1,0 +1,110 @@
+{
+    "scopeName": "source.birdee",
+    "patterns": [{ "include": "#expression" }],
+    "repository": {
+      "expression": {
+        "patterns": [{ "include": "#control" },
+            { "include": "#storage" },
+            { "include": "#paren-expression" },
+            { "include": "#string" },
+            { "include": "#py-expression" },
+            { "include": "#tristring" },
+            { "include": "#blockcomment" },
+            { "include": "#comment" },
+            { "include": "#const" },
+            { "include": "#number" }
+        ]
+      },
+      "control": {
+        "match": "if |then|else|end|while|for |import |as ",
+        "name": "keyword.control.birdee"
+      },
+      "storage": {
+        "match": "function |class |func |dim | closure",
+        "name": "storage.type.birdee"
+      },
+      "const": {
+        "match": "true|false|null",
+        "name": "constant.language.birdee"
+      },
+      "number": {
+        "match": "((\\b0(x|X)[0-9a-fA-F](_?[0-9a-fA-F])*)|(\\b0o[0-7](_?[0-7])*)|(\\b0b[0-1](_?[0-1])*)|((\\b[0-9](_?[0-9])*\\.?(_?[0-9]*))|(\\.[0-9](_?[0-9])*))([eE][+-]?[0-9](_?[0-9])*)?(im\\b)?|)",
+        "name": "constant.numeric.birdee"
+      },
+      "paren-expression": {
+        "begin": "\\(",
+        "end": "\\)",
+        "beginCaptures": {
+          "0": { "name": "punctuation.paren.open" }
+        },
+        "endCaptures": {
+          "0": { "name": "punctuation.paren.close" }
+        },
+        "name": "expression.group",
+        "patterns": [{ "include": "#expression" }]
+      },
+      "string": {
+        "begin": "\"",
+        "end": "\"",
+        "name": "string.quoted.double.birdee",
+        "beginCaptures": {
+            "0": { "name": "punctuation.quote.open" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.quote.close" }
+          },
+        "patterns": [{
+            "match": "\\.",
+            "name": "constant.character.escape.birdee"
+          }]
+      },
+      "tristring": {
+        "begin": "\"\"\"",
+        "end": "\"\"\"",
+        "name": "string.quoted.triple.birdee",
+        "beginCaptures": {
+            "0": { "name": "punctuation.triquote.open" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.triquote.close" }
+          },
+        "patterns": [{
+            "match": "\\.",
+            "name": "constant.character.escape.birdee"
+          }]
+      },
+      "comment": {
+        "begin": "\\#",
+        "end": "\\n",
+        "name": "comment.line.number-sign",
+        "patterns": [{
+            "match": "\\."
+          }]
+      },
+      "blockcomment": {
+        "begin": "\\#\\#",
+        "end": "\\#\\#",
+        "name": "comment.block",
+        "patterns": [{
+            "match": "\\."
+          }]
+      },
+      "py-expression": {
+        "begin": "{\\@",
+        "end": "\\@}",
+        "beginCaptures": {
+          "0": { "name": "punctuation.py.open" }
+        },
+        "endCaptures": {
+          "0": { "name": "punctuation.py.close" }
+        },
+        "contentName": "meta.embedded.block.python",
+        "name": "expression.py",
+        "patterns": [
+            {
+              "include": "source.python"
+            }
+        ]
+      }
+    }
+  }

@@ -1,0 +1,30 @@
+(asdas)
+import a.b.c
+
+function aaa(c as int)
+
+end
+
+dim a as int
+
+if a then
+end
+#123
+"""
+asdasd
+asd
+asdas
+"""
+
+##wfewef
+wfewe
+##
+{@set_ast("123")@}
+{@
+def a():
+    asd #123
+class s:
+    def __init__():
+        a()
+        print()
+@}

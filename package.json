@@ -1,0 +1,79 @@
+{
+	"name": "birdee",
+	"displayName": "Birdee",
+	"description": "Birdee language",
+	"version": "0.0.1",
+	"engines": {
+		"vscode": "^1.41.0"
+	},
+	"languageServerExample.trace.server": "verbose",
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"onLanguage:Birdee"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"languages": [
+			{
+				"id": "Birdee",
+				"extensions": [
+					".bdm"
+				]
+			}
+		],
+		"grammars": [
+			{
+			  "language": "Birdee",
+			  "scopeName": "source.birdee",
+			  "path": "./src/syntax.json",
+			  "embeddedLanguages": {
+				"meta.embedded.block.python": "python"
+			  }
+			}
+		  ],
+		"configuration": {
+			"type": "object",
+			"title": "Client configuration",
+			"properties": {
+				"birdeeLanguageServer.maxNumberOfProblems": {
+					"type": "number",
+					"default": 100,
+					"description": "Controls the maximum number of problems produced by the server."
+				},
+				"birdeeLanguageServer.trace.server": {
+					"type": "string",
+					"enum": [
+						"off",
+						"messages",
+						"verbose"
+					],
+					"default": "verbose",
+					"description": "Traces the communication between VSCode and the dotLanguageServer service."
+				}
+			}
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"pretest": "npm run compile",
+		"test": "node ./out/test/runTest.js"
+	},
+	"dependencies": {
+		"vscode-languageclient": "^4.1.4"
+	},
+	"devDependencies": {
+		"@types/glob": "^7.1.1",
+		"@types/mocha": "^5.2.7",
+		"@types/node": "^12.11.7",
+		"@types/vscode": "^1.41.0",
+		"glob": "^7.1.5",
+		"mocha": "^6.2.2",
+		"typescript": "^3.6.4",
+		"tslint": "^5.20.0",
+		"vscode-test": "^1.2.2"
+	}
+}
