@@ -1,30 +1,18 @@
-(asdas)
-import a.b.c
+dim a as string
+a="asd"
 
-function aaa(c as int)
-
+func asd()
 end
 
-dim a as int
-
-if a then
+class CCCC
+    public aaa as int
+    private func a()
+        aaa=1
+        aaa=1
+    end
 end
-#123
-"""
-asdasd
-asd
-asdas
-"""
 
-##wfewef
-wfewe
-##
-{@set_ast("123")@}
-{@
-def a():
-    asd #123
-class s:
-    def __init__():
-        a()
-        print()
-@}
+dim k as CCCC=ttt
+k.aaa="asd"
+#asd()
+println(a)
