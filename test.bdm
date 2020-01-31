@@ -6,13 +6,17 @@ end
 
 class CCCC
     public aaa as int
-    private func a()
+    public func a()
+        dim t as int
         aaa=1
         aaa=1
+        t=2
+        a()
     end
 end
 
-dim k as CCCC=ttt
-k.aaa="asd"
-#asd()
+dim k as CCCC
+k.aaa=111
+k.a()
+asd()
 println(a)

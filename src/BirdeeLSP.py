@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from pygls.workspace import Document
 import birdeec
 import math
+from threading import Lock
 
 def uri2ospath(uri: str):
     p = urlparse(uri)
@@ -14,6 +15,19 @@ def uri2ospath(uri: str):
 
 server = LanguageServer()
 txt = None
+
+class Compiler:
+    def __init__(self):
+        self.mutex = Lock()
+
+    def __enter__(self):
+        self.mutex.acquire()
+
+    def __exit__(self, ty, value, traceback):
+        birdeec.clear_compile_unit()
+        self.mutex.release()
+
+compiler = Compiler()
 
 def dbgprint(s):
     with open("d:\\birdeelsp.log", "a") as f:
@@ -23,8 +37,11 @@ def find_ast_by_pos(pos: Position):
     tl = birdeec.get_top_level()
     res=[]
     def runfunc(ast: birdeec.StatementAST):
-        if ast.pos.line == pos.line + 1:
-            res.append((abs(ast.pos.pos - pos.character - 1), ast))
+        if not ast:
+            return
+        #dbgprint(f"{str(ast)} {ast.pos.line} {ast.pos.pos}")
+        if ast.pos.line == pos.line + 1 and ast.pos.pos >= pos.character + 1:
+            res.append((ast.pos.pos - pos.character - 1, ast))
         ast.run(runfunc)
     for a in tl:
         runfunc(a)
@@ -47,44 +64,44 @@ def get_member_def_pos(mem: birdeec.MemberExprAST) -> birdeec.SourcePos:
 
 def get_def(istr, pos: Position)->Position:
     ret=None
-    try:
-        birdeec.top_level(istr)
-        birdeec.process_top_level()
-        asts=find_ast_by_pos(pos)
-        dbgprint(str(asts))
-        for ast in asts:
-            impl=ast[1]
-            if isinstance(impl, birdeec.LocalVarExprAST):
-                ret=sourcepos2position(impl.vardef.pos)
-                break
-            if isinstance(impl, birdeec.ResolvedFuncExprAST):
-                ret=sourcepos2position(impl.funcdef.pos)
-                break
-            if isinstance(impl, birdeec.MemberExprAST):
-                ret=sourcepos2position(get_member_def_pos(impl))
-                break
+    with compiler:
+        try:
+            birdeec.top_level(istr)
+            birdeec.process_top_level()
+            asts=find_ast_by_pos(pos)
+            #dbgprint(str(asts))
+            for ast in asts:
+                impl=ast[1]
+                if isinstance(impl, birdeec.LocalVarExprAST):
+                    ret=sourcepos2position(impl.vardef.pos)
+                    break
+                if isinstance(impl, birdeec.ResolvedFuncExprAST):
+                    ret=sourcepos2position(impl.funcdef.pos)
+                    break
+                if isinstance(impl, birdeec.MemberExprAST):
+                    ret=sourcepos2position(get_member_def_pos(impl))
+                    break
 
-    except birdeec.TokenizerException:
-        e=birdeec.get_tokenizer_error()
-        #print(e.linenumber,e.pos,e.msg)
-    except birdeec.CompileException:
-        e=birdeec.get_compile_error()
-        #print(e.linenumber,e.pos,e.msg)		
-    birdeec.clear_compile_unit()
+        except birdeec.TokenizerException:
+            e=birdeec.get_tokenizer_error()
+            #print(e.linenumber,e.pos,e.msg)
+        except birdeec.CompileException:
+            e=birdeec.get_compile_error()
+            #print(e.linenumber,e.pos,e.msg)		
     return ret
 
 def get_errors(istr):
     e=None
-    try:
-        birdeec.top_level(istr)
-        birdeec.process_top_level()
-    except birdeec.TokenizerException:
-        e=birdeec.get_tokenizer_error()
-        #print(e.linenumber,e.pos,e.msg)
-    except birdeec.CompileException:
-        e=birdeec.get_compile_error()
-        #print(e.linenumber,e.pos,e.msg)		
-    birdeec.clear_compile_unit()
+    with compiler:
+        try:
+            birdeec.top_level(istr)
+            birdeec.process_top_level()
+        except birdeec.TokenizerException:
+            e=birdeec.get_tokenizer_error()
+            #print(e.linenumber,e.pos,e.msg)
+        except birdeec.CompileException:
+            e=birdeec.get_compile_error()
+            #print(e.linenumber,e.pos,e.msg)
     return e
 
 @server.feature(COMPLETION, trigger_characters=[','])

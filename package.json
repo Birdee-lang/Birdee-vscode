@@ -50,7 +50,12 @@
 						"verbose"
 					],
 					"default": "verbose",
-					"description": "Traces the communication between VSCode and the dotLanguageServer service."
+					"description": "Traces the communication between VSCode and the birdeeLanguageServer service."
+				},
+				"birdeeLanguageServer.compilerPath": {
+					"type": "string",
+					"default": "",
+					"description": "The path of Birdee compiler"
 				}
 			}
 		}
