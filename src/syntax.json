@@ -6,29 +6,79 @@
         "patterns": [{ "include": "#control" },
             { "include": "#storage" },
             { "include": "#paren-expression" },
+            { "include": "#bracket-expression" },
             { "include": "#string" },
             { "include": "#py-expression" },
             { "include": "#tristring" },
             { "include": "#blockcomment" },
             { "include": "#comment" },
             { "include": "#const" },
-            { "include": "#number" }
+            { "include": "#number" },
+            { "include": "#operator" }
+        ]
+      },
+      "operator": {
+        "patterns": [
+          {
+            "match": "(?:\\-\\>|\\<\\-|\\-\\-\\>|\\=\\>)",
+            "name": "keyword.operator.arrow.birdee"
+          },
+          {
+            "match": "(?:\\+|\\-|\\*|\\/|\\%)",
+            "name": "keyword.operator.arithmetic.birdee"
+          },
+          {
+            "match": "(?:===|==|\\!==|\\!=|\\>=|\\<=)",
+            "name": "keyword.operator.relation.birdee"
+          },
+          {
+            "match": "(?:\\>|\\<|\\|\\||\\!|\\&\\&)",
+            "name": "keyword.operator.boolean.birdee"
+          },
+          {
+            "match": "(?:(?![\\<\\>\\!=])=(?!=))",
+            "name": "keyword.operator.update.birdee"
+          },
+          {
+            "match": "(?:\\&|\\||\\^)",
+            "name": "keyword.operator.bitwise.birdee"
+          },
+          {
+            "match": "(?:\\.)",
+            "name": "keyword.operator.dots.birdee"
+          }
         ]
       },
       "control": {
-        "match": "if |then|else|end|while|for |import |as ",
+        "match": "\\b(?:if|then|else|end|while|for|import|package|as|continue|break|to|till|try|catch|throw|defer|new)\\b",
         "name": "keyword.control.birdee"
       },
       "storage": {
-        "match": "function |class |func |dim | closure",
-        "name": "storage.type.birdee"
+        "patterns": [
+          {
+            "match": "\\b(?:function|class|struct|interface|func|dim|closure|declare|alias|functype|int|long|byte|ulong|uint|short|float|double|pointer|boolean)\\b",
+            "name": "storage.type.birdee"
+          },
+          {
+            "match": "\\b(?:abstract|private|public)\\b",
+            "name": "storage.modifier.birdee"
+          }
+        ]
       },
       "const": {
-        "match": "true|false|null",
-        "name": "constant.language.birdee"
+        "patterns": [
+          {
+            "match": "\\b(?:true|false|null|nullptr)\\b",
+            "name": "constant.language.birdee"
+          },
+          {
+            "match": "\\b(?:this|super)\\b",
+            "name": "constant.other.birdee"
+          }
+        ]
       },
       "number": {
-        "match": "((\\b0(x|X)[0-9a-fA-F](_?[0-9a-fA-F])*)|(\\b0o[0-7](_?[0-7])*)|(\\b0b[0-1](_?[0-1])*)|((\\b[0-9](_?[0-9])*\\.?(_?[0-9]*))|(\\.[0-9](_?[0-9])*))([eE][+-]?[0-9](_?[0-9])*)?(im\\b)?|)",
+        "match": "\\b(?:([0-9]+\\.)?[0-9]+)\\b",
         "name": "constant.numeric.birdee"
       },
       "paren-expression": {
@@ -39,6 +89,18 @@
         },
         "endCaptures": {
           "0": { "name": "punctuation.paren.close" }
+        },
+        "name": "expression.group",
+        "patterns": [{ "include": "#expression" }]
+      },
+      "bracket-expression": {
+        "begin": "\\[",
+        "end": "\\]",
+        "beginCaptures": {
+          "0": { "name": "punctuation.bracket.open" }
+        },
+        "endCaptures": {
+          "0": { "name": "punctuation.bracket.close" }
         },
         "name": "expression.group",
         "patterns": [{ "include": "#expression" }]

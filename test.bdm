@@ -6,12 +6,25 @@ end
 
 class CCCC
     public aaa as int
+    private bbb as short
+    public fff as float
+    private ccc as boolean
     public func a()
         dim t as int
         aaa=1
-        aaa=1
         t=2
         a()
+        bbb=3
+        fff = 123.456
+        ccc = true
+        if aaa === bbb &&
+            aaa <= bbb &&
+            aaa >= bbb &&
+            aaa != bbb &&
+            aaa !== bbb ||
+            !ccc then
+            ccc = false
+        end
     end
 end
 
