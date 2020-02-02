@@ -19,19 +19,46 @@ txt = None
 class Compiler:
     def __init__(self):
         self.mutex = Lock()
+        self.changed= True
+        self.last_status = False
 
     def __enter__(self):
         self.mutex.acquire()
 
     def __exit__(self, ty, value, traceback):
-        birdeec.clear_compile_unit()
         self.mutex.release()
+    
+    def compile(self, uri, istr) -> bool:
+        if not self.changed:
+            return self.last_status
+        e=None
+        try:
+            birdeec.clear_compile_unit()
+            birdeec.top_level(istr)
+            birdeec.process_top_level()
+        except birdeec.TokenizerException:
+            e=birdeec.get_tokenizer_error()
+        except birdeec.CompileException:
+            e=birdeec.get_compile_error()
+        
+        self.changed=False
+        if not e:
+            self.last_status=True
+            server.publish_diagnostics(uri, [])
+            return True
+        else:
+            self.last_status=False
+            diag = Diagnostic(Range(
+                Position(e.linenumber, e.pos+1), Position(e.linenumber, e.pos+2)
+            ), e.msg)
+            server.publish_diagnostics(uri, [diag])
+            return False
 
 compiler = Compiler()
 
 def dbgprint(s):
     with open("d:\\birdeelsp.log", "a") as f:
-        f.write(s+"\n")
+        f.write(str(s)+"\n")
 
 def find_ast_by_pos(pos: Position):
     tl = birdeec.get_top_level()
@@ -43,8 +70,11 @@ def find_ast_by_pos(pos: Position):
         if ast.pos.line == pos.line + 1 and ast.pos.pos >= pos.character + 1:
             res.append((ast.pos.pos - pos.character - 1, ast))
         ast.run(runfunc)
+    toplevel=[] #list of (line distance, stmt)
     for a in tl:
-        runfunc(a)
+        toplevel.append((abs(a.pos.line - pos.line -1), a))
+    for a in sorted(toplevel, key = lambda x: x[0])[0: 4]: #get nearest 4 toplevel stmt, sorted by line
+        runfunc(a[1]) # run into the AST to find the specific statement
     return sorted(res,  key=lambda x: x[0])
 
 def sourcepos2position(pos: birdeec.SourcePos) -> Position:
@@ -62,47 +92,25 @@ def get_member_def_pos(mem: birdeec.MemberExprAST) -> birdeec.SourcePos:
         return mem.imported_func.pos
     return None  
 
-def get_def(istr, pos: Position)->Position:
+def get_def(uri, istr, pos: Position)->Position:
     ret=None
     with compiler:
-        try:
-            birdeec.top_level(istr)
-            birdeec.process_top_level()
-            asts=find_ast_by_pos(pos)
-            #dbgprint(str(asts))
-            for ast in asts:
-                impl=ast[1]
-                if isinstance(impl, birdeec.LocalVarExprAST):
-                    ret=sourcepos2position(impl.vardef.pos)
-                    break
-                if isinstance(impl, birdeec.ResolvedFuncExprAST):
-                    ret=sourcepos2position(impl.funcdef.pos)
-                    break
-                if isinstance(impl, birdeec.MemberExprAST):
-                    ret=sourcepos2position(get_member_def_pos(impl))
-                    break
-
-        except birdeec.TokenizerException:
-            e=birdeec.get_tokenizer_error()
-            #print(e.linenumber,e.pos,e.msg)
-        except birdeec.CompileException:
-            e=birdeec.get_compile_error()
-            #print(e.linenumber,e.pos,e.msg)		
+        if not compiler.compile(uri, istr):
+            return ret
+        asts=find_ast_by_pos(pos)
+        #dbgprint(str(asts))
+        for ast in asts:
+            impl=ast[1]
+            if isinstance(impl, birdeec.LocalVarExprAST):
+                ret=sourcepos2position(impl.vardef.pos)
+                break
+            if isinstance(impl, birdeec.ResolvedFuncExprAST):
+                ret=sourcepos2position(impl.funcdef.pos)
+                break
+            if isinstance(impl, birdeec.MemberExprAST):
+                ret=sourcepos2position(get_member_def_pos(impl))
+                break	
     return ret
-
-def get_errors(istr):
-    e=None
-    with compiler:
-        try:
-            birdeec.top_level(istr)
-            birdeec.process_top_level()
-        except birdeec.TokenizerException:
-            e=birdeec.get_tokenizer_error()
-            #print(e.linenumber,e.pos,e.msg)
-        except birdeec.CompileException:
-            e=birdeec.get_compile_error()
-            #print(e.linenumber,e.pos,e.msg)
-    return e
 
 @server.feature(COMPLETION, trigger_characters=[','])
 def completions(params: CompletionParams):
@@ -117,7 +125,7 @@ def completions(params: CompletionParams):
 
 @server.feature(DEFINITION)
 def definitions(params: TextDocumentPositionParams):
-    r=get_def(txt.source, params.position)
+    r=get_def(params.textDocument.uri, txt.source, params.position)
     if r:
         return Location(params.textDocument.uri, Range(
             r, Position(r.line, r.character+1)
@@ -127,6 +135,8 @@ def definitions(params: TextDocumentPositionParams):
 
 @server.feature(TEXT_DOCUMENT_DID_CHANGE)
 def didchange(params: DidChangeTextDocumentParams):
+    with compiler:
+        compiler.changed=True
     for ch in params.contentChanges:
         txt.apply_change(ch)
 
@@ -137,14 +147,8 @@ def didopen(params: DidOpenTextDocumentParams):
 
 @server.feature(TEXT_DOCUMENT_DID_SAVE)
 def didsave(params: DidSaveTextDocumentParams):
-    e=get_errors(txt.source)
-    if not e:
-        server.publish_diagnostics(params.textDocument.uri, [])
-    else:
-        diag = Diagnostic(Range(
-            Position(e.linenumber, e.pos+1), Position(e.linenumber, e.pos+2)
-        ), e.msg)
-        server.publish_diagnostics(params.textDocument.uri, [diag])
+    with compiler:
+        compiler.compile(params.textDocument.uri, txt.source)
 
 
 server.start_io()
