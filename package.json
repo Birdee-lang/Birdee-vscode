@@ -25,14 +25,14 @@
 		],
 		"grammars": [
 			{
-			  "language": "Birdee",
-			  "scopeName": "source.birdee",
-			  "path": "./src/syntax.json",
-			  "embeddedLanguages": {
-				"meta.embedded.block.python": "python"
-			  }
+				"language": "Birdee",
+				"scopeName": "source.birdee",
+				"path": "./src/syntax.json",
+				"embeddedLanguages": {
+					"meta.embedded.block.python": "python"
+				}
 			}
-		  ],
+		],
 		"configuration": {
 			"type": "object",
 			"title": "Client configuration",
