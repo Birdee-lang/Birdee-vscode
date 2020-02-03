@@ -14,13 +14,15 @@ def uri2ospath(uri: str):
     return os.path.abspath(os.path.join(p.netloc, p.path))
 
 server = LanguageServer()
-txt = None
+txt = dict()
 
 class Compiler:
     def __init__(self):
         self.mutex = Lock()
-        self.changed= True
+        self.uri=None
         self.last_status = False
+        self.last_compiled_source = None
+        self.last_successful_source = dict()
 
     def __enter__(self):
         self.mutex.acquire()
@@ -28,10 +30,18 @@ class Compiler:
     def __exit__(self, ty, value, traceback):
         self.mutex.release()
     
+    def switch_to_last_successful(self, uri):
+        if uri in self.last_successful_source:
+            self.compile(uri, self.last_successful_source[uri])
+        else:
+            birdeec.clear_compile_unit()
+
+
     def compile(self, uri, istr) -> bool:
-        if not self.changed:
+        if self.uri == uri and istr == self.last_compiled_source:
             return self.last_status
         e=None
+        self.last_compiled_source = istr
         try:
             birdeec.clear_compile_unit()
             birdeec.top_level(istr)
@@ -41,9 +51,11 @@ class Compiler:
         except birdeec.CompileException:
             e=birdeec.get_compile_error()
         
+        self.uri= uri
         self.changed=False
         if not e:
             self.last_status=True
+            self.last_successful_source[uri] = istr
             server.publish_diagnostics(uri, [])
             return True
         else:
@@ -112,20 +124,41 @@ def get_def(uri, istr, pos: Position)->Position:
                 break	
     return ret
 
-@server.feature(COMPLETION, trigger_characters=[','])
+primitive_types=[
+                    CompletionItem('byte', kind=CompletionItemKind.Class),
+                    CompletionItem('int', kind=CompletionItemKind.Class),
+                    CompletionItem('uint', kind=CompletionItemKind.Class),
+                    CompletionItem('long', kind=CompletionItemKind.Class),
+                    CompletionItem('ulong', kind=CompletionItemKind.Class),
+                    CompletionItem('float', kind=CompletionItemKind.Class),
+                    CompletionItem('double', kind=CompletionItemKind.Class),
+                    CompletionItem('pointer', kind=CompletionItemKind.Class),
+                ]
+
+@server.feature(COMPLETION, trigger_characters=[' '])
 def completions(params: CompletionParams):
-    """Returns completion items."""
-    return CompletionList(False, [
-        CompletionItem('"'),
-        CompletionItem('['),
-        CompletionItem(']'),
-        CompletionItem('{'),
-        CompletionItem(123)
-    ])
+    #bybass a bug (?) of pygls 
+    if not hasattr(params.context, 'triggerKind'):
+        return None
+    if params.context.triggerKind==2:
+        if params.context.triggerCharacter==' ':
+            t: Document = txt[params.textDocument.uri]
+            pos = params.position.character
+            istr = t.source.split('\n')[params.position.line]
+            if istr[pos-3:pos+1]=="as " or istr[pos-4:pos+1]=="new ":
+                    with compiler:
+                        compiler.switch_to_last_successful(params.textDocument.uri)
+                    class_names = list(birdeec.get_classes(True).keys()) + list(birdeec.get_classes(False).keys())
+                    functype_names = list(birdeec.get_functypes(True).keys()) + list(birdeec.get_functypes(False).keys())
+                    cls_completion = [CompletionItem(name) for name in class_names]
+                    func_completion = [CompletionItem(name, kind=CompletionItemKind.Function) for name in functype_names]
+                    return CompletionList(False, primitive_types + cls_completion + func_completion)
+    return None
 
 @server.feature(DEFINITION)
 def definitions(params: TextDocumentPositionParams):
-    r=get_def(params.textDocument.uri, txt.source, params.position)
+    uri=params.textDocument.uri
+    r=get_def(uri, txt[uri].source, params.position)
     if r:
         return Location(params.textDocument.uri, Range(
             r, Position(r.line, r.character+1)
@@ -135,20 +168,19 @@ def definitions(params: TextDocumentPositionParams):
 
 @server.feature(TEXT_DOCUMENT_DID_CHANGE)
 def didchange(params: DidChangeTextDocumentParams):
-    with compiler:
-        compiler.changed=True
     for ch in params.contentChanges:
-        txt.apply_change(ch)
+        txt[params.textDocument.uri].apply_change(ch)
 
 @server.feature(TEXT_DOCUMENT_DID_OPEN)
 def didopen(params: DidOpenTextDocumentParams):
-    global txt
-    txt=Document(params.textDocument.uri)
-
+    uri=params.textDocument.uri
+    txt[uri]=Document(uri)
+    
 @server.feature(TEXT_DOCUMENT_DID_SAVE)
 def didsave(params: DidSaveTextDocumentParams):
     with compiler:
-        compiler.compile(params.textDocument.uri, txt.source)
+        uri=params.textDocument.uri
+        compiler.compile(uri, txt[uri].source)
 
 
 server.start_io()
