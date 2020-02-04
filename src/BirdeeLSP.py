@@ -1,6 +1,7 @@
 from pygls.features import *
 from pygls.server import LanguageServer
 from pygls.types import *
+from pygls.uris import from_fs_path
 from urllib.parse import unquote
 import os
 from urllib.parse import urlparse
@@ -89,9 +90,10 @@ def find_ast_by_pos(pos: Position):
         runfunc(a[1]) # run into the AST to find the specific statement
     return sorted(res,  key=lambda x: x[0])
 
-def sourcepos2position(pos: birdeec.SourcePos) -> Position:
+def sourcepos2position(pos: birdeec.SourcePos, main_src_uri: str) -> (Position, str):
     if not pos: return None
-    return Position(pos.line - 1, pos.pos - 1)
+    uri = from_fs_path(pos.source_path) if pos.source_idx != -1 else main_src_uri
+    return (Position(pos.line - 1, pos.pos - 1), uri)
 
 def get_member_def_pos(mem: birdeec.MemberExprAST) -> birdeec.SourcePos:
     if mem.kind == birdeec.MemberExprAST.MemberType.FIELD:
@@ -104,7 +106,7 @@ def get_member_def_pos(mem: birdeec.MemberExprAST) -> birdeec.SourcePos:
         return mem.imported_func.pos
     return None  
 
-def get_def(uri, istr, pos: Position)->Position:
+def get_def(uri, istr, pos: Position)-> (Position, str):
     ret=None
     with compiler:
         if not compiler.compile(uri, istr):
@@ -114,13 +116,13 @@ def get_def(uri, istr, pos: Position)->Position:
         for ast in asts:
             impl=ast[1]
             if isinstance(impl, birdeec.LocalVarExprAST):
-                ret=sourcepos2position(impl.vardef.pos)
+                ret=sourcepos2position(impl.vardef.pos, uri)
                 break
             if isinstance(impl, birdeec.ResolvedFuncExprAST):
-                ret=sourcepos2position(impl.funcdef.pos)
+                ret=sourcepos2position(impl.funcdef.pos, uri)
                 break
             if isinstance(impl, birdeec.MemberExprAST):
-                ret=sourcepos2position(get_member_def_pos(impl))
+                ret=sourcepos2position(get_member_def_pos(impl), uri)
                 break	
     return ret
 
@@ -158,9 +160,9 @@ def completions(params: CompletionParams):
 @server.feature(DEFINITION)
 def definitions(params: TextDocumentPositionParams):
     uri=params.textDocument.uri
-    r=get_def(uri, txt[uri].source, params.position)
+    r, outuri=get_def(uri, txt[uri].source, params.position)
     if r:
-        return Location(params.textDocument.uri, Range(
+        return Location(outuri, Range(
             r, Position(r.line, r.character+1)
         ))
     else:
