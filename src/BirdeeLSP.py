@@ -59,7 +59,7 @@ class Compiler:
         self.last_compiled_source = istr
         fspath=to_fs_path(uri)
         try:
-            birdeec.set_file_name(fspath)
+            birdeec.set_source_file_path(fspath)
             birdeec.clear_compile_unit()
             birdeec.top_level(istr)
             birdeec.process_top_level()
