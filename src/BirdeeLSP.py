@@ -1,7 +1,7 @@
 from pygls.features import *
 from pygls.server import LanguageServer
 from pygls.types import *
-from pygls.uris import from_fs_path
+from pygls.uris import from_fs_path, to_fs_path
 from urllib.parse import unquote
 import os
 from urllib.parse import urlparse
@@ -17,13 +17,27 @@ def uri2ospath(uri: str):
 server = LanguageServer()
 txt = dict()
 
+def dbgprint(s):
+    with open("d:\\birdeelsp.log", "a") as f:
+        f.write(str(s)+"\n")
+
 class Compiler:
     def __init__(self):
         self.mutex = Lock()
         self.uri=None
         self.last_status = False
         self.last_compiled_source = None
-        self.last_successful_source = dict()
+        self.last_successful_source = dict() # str(uri) -> str(source)
+        self.module_metadata = dict() # tuple[module_names] -> str(json)
+        birdeec.set_module_resolver(self._module_resolver)
+
+    def _module_resolver(self, modname):
+        tmod = tuple(modname)
+        #dbgprint(modname)
+        if tmod in self.module_metadata:
+            return ("$InMemoryModule", self.module_metadata[tmod])
+        else:
+            return None
 
     def __enter__(self):
         self.mutex.acquire()
@@ -43,7 +57,9 @@ class Compiler:
             return self.last_status
         e=None
         self.last_compiled_source = istr
+        fspath=to_fs_path(uri)
         try:
+            birdeec.set_file_name(fspath)
             birdeec.clear_compile_unit()
             birdeec.top_level(istr)
             birdeec.process_top_level()
@@ -57,6 +73,9 @@ class Compiler:
         if not e:
             self.last_status=True
             self.last_successful_source[uri] = istr
+            cur_module = tuple(birdeec.get_module_name().split("."))
+            dbgprint(cur_module)
+            self.module_metadata[cur_module] = birdeec.get_metadata_json()
             server.publish_diagnostics(uri, [])
             return True
         else:
@@ -69,9 +88,7 @@ class Compiler:
 
 compiler = Compiler()
 
-def dbgprint(s):
-    with open("d:\\birdeelsp.log", "a") as f:
-        f.write(str(s)+"\n")
+
 
 def find_ast_by_pos(pos: Position):
     tl = birdeec.get_top_level()
@@ -177,6 +194,8 @@ def didchange(params: DidChangeTextDocumentParams):
 def didopen(params: DidOpenTextDocumentParams):
     uri=params.textDocument.uri
     txt[uri]=Document(uri)
+    with compiler:
+        compiler.compile(uri, params.textDocument.text)
     
 @server.feature(TEXT_DOCUMENT_DID_SAVE)
 def didsave(params: DidSaveTextDocumentParams):
