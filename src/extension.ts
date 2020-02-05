@@ -18,9 +18,9 @@ export function activate(context: ExtensionContext) {
 
   // The server is implemented in another project and outputted there
   let serverCommand = context.asAbsolutePath(path.join('src', 'BirdeeLSP.py'));
-  console.log(serverCommand)
+  console.log(serverCommand);
   let compilerPath: string = workspace.getConfiguration("birdeeLanguageServer").get<string>("compilerPath")!;
-  console.log("Compiler=" + compilerPath)
+  console.log("Compiler=" + compilerPath);
   if (compilerPath === "") {
     compilerPath = process.env["BIRDEE_HOME"] + "/bin/birdeec";
   }
@@ -43,7 +43,7 @@ export function activate(context: ExtensionContext) {
     },
   };
   // Create the language client and start the client.
-  client = new LanguageClient('birdeeLanguageServer', 'Language Server', serverOptions, clientOptions)
+  client = new LanguageClient('birdeeLanguageServer', 'Language Server', serverOptions, clientOptions);
   // Push the disposable to the context's subscriptions so that the 
   // client can be deactivated on extension deactivation
   client.trace = Trace.Verbose;

@@ -4,18 +4,15 @@ from pygls.types import *
 from pygls.uris import from_fs_path, to_fs_path
 from urllib.parse import unquote
 import os
-from urllib.parse import urlparse
 from pygls.workspace import Document
 import birdeec
 import math
 from threading import Lock
 
-def uri2ospath(uri: str):
-    p = urlparse(uri)
-    return os.path.abspath(os.path.join(p.netloc, p.path))
-
 server = LanguageServer()
 txt = dict()
+root_path = None
+source_root_path = None
 
 def dbgprint(s):
     with open("d:\\birdeelsp.log", "a") as f:
@@ -29,15 +26,6 @@ class Compiler:
         self.last_compiled_source = None
         self.last_successful_source = dict() # str(uri) -> str(source)
         self.module_metadata = dict() # tuple[module_names] -> str(json)
-        birdeec.set_module_resolver(self._module_resolver)
-
-    def _module_resolver(self, modname):
-        tmod = tuple(modname)
-        #dbgprint(modname)
-        if tmod in self.module_metadata:
-            return ("$InMemoryModule", self.module_metadata[tmod])
-        else:
-            return None
 
     def __enter__(self):
         self.mutex.acquire()
@@ -51,31 +39,77 @@ class Compiler:
         else:
             birdeec.clear_compile_unit()
 
+    '''
+    compile a module and its dependencies:
+        if it has any uncompiled modules that we can find source in the workspace,
+        compile it. Then get and store the dependencies' BMM metadata in memory.
+        Then re-compile the module
+    '''
+    def _docompile(self, fspath, istr):
+        e=None
+        can_recompile=True
+        dependencies=[]
+        def _module_resolver(modname, second_chance):
+            tmod = tuple(modname)
+            nonlocal can_recompile
+            if not second_chance:
+                if tmod in self.module_metadata:
+                    return ("$InMemoryModule", self.module_metadata[tmod])
+                else:
+                    return None
+            else:
+                modname[-1] = modname[-1] + ".bdm"
+                target_path = os.path.join(root_path, source_root_path, *modname)
+                if os.path.exists(target_path):
+                    dependencies.append(target_path)
+                else:
+                    can_recompile=False
+                return None
+
+        def compileit():
+            nonlocal e
+            birdeec.set_module_resolver(_module_resolver)
+            try:
+                birdeec.set_source_file_path(fspath)
+                birdeec.clear_compile_unit()
+                birdeec.top_level(istr)
+                birdeec.process_top_level()
+            except birdeec.TokenizerException:
+                e=birdeec.get_tokenizer_error()
+            except birdeec.CompileException:
+                e=birdeec.get_compile_error()
+            if not e: 
+                cur_module = tuple(birdeec.get_module_name().split("."))
+                self.module_metadata[cur_module] = birdeec.get_metadata_json()
+
+        compileit()
+        if not e:
+            return e
+        if not can_recompile or len(dependencies)==0:
+            return e
+        # can re-compile
+        # first compile dependencies
+        for srcpath in dependencies:
+            src = ""
+            with open(srcpath) as f:
+                src = f.read()
+            self._docompile(srcpath, src)
+        e = None
+        compileit()
+        return e
 
     def compile(self, uri, istr) -> bool:
         if self.uri == uri and istr == self.last_compiled_source:
             return self.last_status
-        e=None
+
         self.last_compiled_source = istr
         fspath=to_fs_path(uri)
-        try:
-            birdeec.set_source_file_path(fspath)
-            birdeec.clear_compile_unit()
-            birdeec.top_level(istr)
-            birdeec.process_top_level()
-        except birdeec.TokenizerException:
-            e=birdeec.get_tokenizer_error()
-        except birdeec.CompileException:
-            e=birdeec.get_compile_error()
-        
+        e = self._docompile(fspath, istr)                
         self.uri= uri
         self.changed=False
         if not e:
             self.last_status=True
             self.last_successful_source[uri] = istr
-            cur_module = tuple(birdeec.get_module_name().split("."))
-            dbgprint(cur_module)
-            self.module_metadata[cur_module] = birdeec.get_metadata_json()
             server.publish_diagnostics(uri, [])
             return True
         else:
@@ -96,7 +130,6 @@ def find_ast_by_pos(pos: Position):
     def runfunc(ast: birdeec.StatementAST):
         if not ast:
             return
-        #dbgprint(f"{str(ast)} {ast.pos.line} {ast.pos.pos}")
         if ast.pos.line == pos.line + 1 and ast.pos.pos >= pos.character + 1:
             res.append((ast.pos.pos - pos.character - 1, ast))
         ast.run(runfunc)
@@ -129,7 +162,6 @@ def get_def(uri, istr, pos: Position)-> (Position, str):
         if not compiler.compile(uri, istr):
             return ret
         asts=find_ast_by_pos(pos)
-        #dbgprint(str(asts))
         for ast in asts:
             impl=ast[1]
             if isinstance(impl, birdeec.LocalVarExprAST):
@@ -185,6 +217,11 @@ def definitions(params: TextDocumentPositionParams):
     else:
         return None
 
+@server.feature(INITIALIZE)
+def oninitialize(params: InitializeParams):
+    global root_path
+    root_path = params.rootPath
+
 @server.feature(TEXT_DOCUMENT_DID_CHANGE)
 def didchange(params: DidChangeTextDocumentParams):
     for ch in params.contentChanges:
@@ -203,5 +240,9 @@ def didsave(params: DidSaveTextDocumentParams):
         uri=params.textDocument.uri
         compiler.compile(uri, txt[uri].source)
 
+@server.feature(WORKSPACE_DID_CHANGE_CONFIGURATION)
+def onconfigchange(params: DidChangeConfigurationParams):
+    global source_root_path
+    source_root_path = params.settings.birdeeLanguageServer.sourceRoot
 
 server.start_io()

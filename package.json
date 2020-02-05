@@ -56,6 +56,11 @@
 					"type": "string",
 					"default": "",
 					"description": "The path of Birdee compiler"
+				},
+				"birdeeLanguageServer.sourceRoot": {
+					"type": "string",
+					"default": "src",
+					"description": "Root path of the source code in a workspace"
 				}
 			}
 		}
