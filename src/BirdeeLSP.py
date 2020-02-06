@@ -13,6 +13,7 @@ server = LanguageServer()
 txt = dict()
 root_path = None
 source_root_path = None
+cache_path = None
 
 def dbgprint(s):
     with open("d:\\birdeelsp.log", "a") as f:
@@ -39,6 +40,17 @@ class Compiler:
         else:
             birdeec.clear_compile_unit()
 
+    def on_exit(self):
+        for mod in self.module_metadata:
+            modname=list(mod)
+            modname[-1] = modname[-1] + ".bmm"
+            target_path = os.path.join(root_path, cache_path, *modname)
+            tdir = os.path.dirname(target_path)
+            if not os.path.exists(tdir):
+                os.makedirs(tdir)
+            with open(target_path, 'w') as f:
+                f.write(self.module_metadata[mod])
+
     '''
     compile a module and its dependencies:
         if it has any uncompiled modules that we can find source in the workspace,
@@ -46,28 +58,17 @@ class Compiler:
         Then re-compile the module
     '''
     def _docompile(self, fspath, istr):
-        e=None
-        can_recompile=True
-        dependencies=[]
-        def _module_resolver(modname, second_chance):
-            tmod = tuple(modname)
-            nonlocal can_recompile
-            if not second_chance:
-                if tmod in self.module_metadata:
-                    return ("$InMemoryModule", self.module_metadata[tmod])
-                else:
-                    return None
+        def find_module_path(mod, ext):
+            modname=list(mod)
+            modname[-1] = modname[-1] + ext
+            target_path = os.path.join(root_path, source_root_path, *modname)
+            if os.path.exists(target_path):
+                return target_path
             else:
-                modname[-1] = modname[-1] + ".bdm"
-                target_path = os.path.join(root_path, source_root_path, *modname)
-                if os.path.exists(target_path):
-                    dependencies.append(target_path)
-                else:
-                    can_recompile=False
                 return None
 
         def compileit():
-            nonlocal e
+            e = None
             birdeec.set_module_resolver(_module_resolver)
             try:
                 birdeec.set_source_file_path(fspath)
@@ -78,24 +79,51 @@ class Compiler:
                 e=birdeec.get_tokenizer_error()
             except birdeec.CompileException:
                 e=birdeec.get_compile_error()
-            if not e: 
+            if not e:
                 cur_module = tuple(birdeec.get_module_name().split("."))
                 self.module_metadata[cur_module] = birdeec.get_metadata_json()
+            return e
 
-        compileit()
-        if not e:
-            return e
-        if not can_recompile or len(dependencies)==0:
-            return e
-        # can re-compile
-        # first compile dependencies
-        for srcpath in dependencies:
-            src = ""
-            with open(srcpath) as f:
-                src = f.read()
-            self._docompile(srcpath, src)
-        e = None
-        compileit()
+        while True:
+            e=None
+            can_recompile=True
+            dependencies=[]
+            def _module_resolver(modname, second_chance):
+                tmod = tuple(modname)
+                nonlocal can_recompile
+                if not second_chance:
+                    if tmod in self.module_metadata:
+                        return ("$InMemoryModule", self.module_metadata[tmod])
+                    else:
+                        return None
+                else:
+                    target_path = find_module_path(modname,".bdm")
+                    if not target_path:
+                        target_path = find_module_path(modname,".txt")
+                    if target_path:
+                        dependencies.append((tmod, target_path))
+                    else:
+                        can_recompile=False
+                    return None
+            e = compileit()
+            if not e:
+                return e
+            if not can_recompile or len(dependencies)==0:
+                return e
+            # can re-compile
+            # first compile dependencies
+            for (mod,srcpath) in dependencies:
+                if mod in self.module_metadata: 
+                    # a dependency may be compiled in another dependency
+                    continue
+                src = ""
+                with open(srcpath) as f:
+                    src = f.read()
+                sub_e = self._docompile(srcpath, src)
+                if sub_e:
+                    msg = "While compiling {}, an error occurs: {}".format(srcpath, sub_e.msg)
+                    server.show_message(msg, MessageType.Error)
+                    return e
         return e
 
     def compile(self, uri, istr) -> bool:
@@ -242,7 +270,12 @@ def didsave(params: DidSaveTextDocumentParams):
 
 @server.feature(WORKSPACE_DID_CHANGE_CONFIGURATION)
 def onconfigchange(params: DidChangeConfigurationParams):
-    global source_root_path
+    global source_root_path, cache_path
     source_root_path = params.settings.birdeeLanguageServer.sourceRoot
+    cache_path = params.settings.birdeeLanguageServer.lspCache
+
+@server.feature(SHUTDOWN)
+def onexit(params):
+    compiler.on_exit()
 
 server.start_io()

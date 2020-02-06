@@ -20,14 +20,18 @@ export function activate(context: ExtensionContext) {
   let serverCommand = context.asAbsolutePath(path.join('src', 'BirdeeLSP.py'));
   console.log(serverCommand);
   let compilerPath: string = workspace.getConfiguration("birdeeLanguageServer").get<string>("compilerPath")!;
+  let cachePath: string = workspace.getConfiguration("birdeeLanguageServer").get<string>("lspCache")!;
+  cachePath = path.join(workspace.workspaceFolders![0].uri.fsPath, cachePath);
   console.log("Compiler=" + compilerPath);
+  console.log("Cache=" + cachePath);
+
   if (compilerPath === "") {
     compilerPath = process.env["BIRDEE_HOME"] + "/bin/birdeec";
   }
   let commandOptions: ExecutableOptions = { stdio: 'pipe', detached: false };
   let serverOptions: Executable = {
     command: compilerPath,
-    args: ["-s", "-i", serverCommand, "-o", "111.obj"],
+    args: ["-s", "-i", serverCommand, "-o", "111.obj", "-l", cachePath],
     options: commandOptions
   };
 

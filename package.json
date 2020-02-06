@@ -59,8 +59,13 @@
 				},
 				"birdeeLanguageServer.sourceRoot": {
 					"type": "string",
-					"default": "src",
+					"default": ".",
 					"description": "Root path of the source code in a workspace"
+				},
+				"birdeeLanguageServer.lspCache": {
+					"type": "string",
+					"default": ".BirdeeCache",
+					"description": "The directory to store the LSP cache in a workspace"
 				}
 			}
 		}
