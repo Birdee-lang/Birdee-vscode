@@ -8,6 +8,7 @@ from pygls.workspace import Document
 import birdeec
 import math
 from threading import Lock
+import bdutils
 
 server = LanguageServer()
 txt = dict()
@@ -142,10 +143,11 @@ class Compiler:
             return True
         else:
             self.last_status=False
-            diag = Diagnostic(Range(
-                Position(e.linenumber, e.pos+1), Position(e.linenumber, e.pos+2)
-            ), e.msg)
-            server.publish_diagnostics(uri, [diag])
+            if not birdeec.get_auto_completion_ast():
+                diag = Diagnostic(Range(
+                    Position(e.linenumber, e.pos+1), Position(e.linenumber, e.pos+2)
+                ), e.msg)
+                server.publish_diagnostics(uri, [diag])
             return False
 
 compiler = Compiler()
@@ -203,6 +205,29 @@ def get_def(uri, istr, pos: Position)-> (Position, str):
                 break	
     return ret
 
+
+completions_for_array=[
+                    CompletionItem('get_raw', kind=CompletionItemKind.Function),
+                    CompletionItem('length', kind=CompletionItemKind.Function),
+                ]
+
+def get_completion_for_type(ty: birdeec.ResolvedType) -> CompletionList:
+    if ty.index_level>0:
+        return CompletionList(False, completions_for_array)
+    detail = ty.get_detail()
+    if isinstance(detail, birdeec.ClassAST):
+        ret=[]
+        def eachfield(idx, length, field: birdeec.FieldDef):
+            nonlocal ret
+            ret.append(CompletionItem(field.decl.name, kind=CompletionItemKind.Field))
+        bdutils.foreach_field(detail,eachfield)
+        def eachfunc(idx, length, field: birdeec.MemberFunctionDef):
+            nonlocal ret
+            ret.append(CompletionItem(field.decl.proto.name, kind=CompletionItemKind.Function))
+        bdutils.foreach_method(detail,eachfunc)
+
+        return CompletionList(False, ret)
+
 primitive_types=[
                     CompletionItem('byte', kind=CompletionItemKind.Class),
                     CompletionItem('int', kind=CompletionItemKind.Class),
@@ -214,7 +239,7 @@ primitive_types=[
                     CompletionItem('pointer', kind=CompletionItemKind.Class),
                 ]
 
-@server.feature(COMPLETION, trigger_characters=[' '])
+@server.feature(COMPLETION, trigger_characters=[' ', '.'])
 def completions(params: CompletionParams):
     #bybass a bug (?) of pygls 
     if not hasattr(params.context, 'triggerKind'):
@@ -232,6 +257,19 @@ def completions(params: CompletionParams):
                     cls_completion = [CompletionItem(name) for name in class_names]
                     func_completion = [CompletionItem(name, kind=CompletionItemKind.Function) for name in functype_names]
                     return CompletionList(False, primitive_types + cls_completion + func_completion)
+        if params.context.triggerCharacter=='.':
+            t: Document = txt[params.textDocument.uri]
+            pos = params.position.character
+            line = params.position.line
+            istr = t.lines
+            istr[line]= istr[line][:pos] + ":" + istr[line][pos:]
+            src="\n".join(istr)
+            expr=None
+            with compiler:
+                compiler.compile(params.textDocument.uri, src)
+                expr=birdeec.get_auto_completion_ast()
+            if expr:
+                return get_completion_for_type(expr.resolved_type)
     return None
 
 @server.feature(DEFINITION)
