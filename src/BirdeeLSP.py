@@ -7,6 +7,7 @@ import os
 from pygls.workspace import Document
 import birdeec
 import math
+import json
 from threading import Lock
 import bdutils
 
@@ -19,6 +20,15 @@ cache_path = None
 def dbgprint(s):
     with open("d:\\birdeelsp.log", "a") as f:
         f.write(str(s)+"\n")
+
+def find_module_path(root, mod, ext):
+    modname=list(mod)
+    modname[-1] = modname[-1] + ext
+    target_path = os.path.join(root, *modname)
+    if os.path.exists(target_path):
+        return target_path
+    else:
+        return None
 
 class Compiler:
     def __init__(self):
@@ -59,15 +69,6 @@ class Compiler:
         Then re-compile the module
     '''
     def _docompile(self, fspath, istr):
-        def find_module_path(mod, ext):
-            modname=list(mod)
-            modname[-1] = modname[-1] + ext
-            target_path = os.path.join(root_path, source_root_path, *modname)
-            if os.path.exists(target_path):
-                return target_path
-            else:
-                return None
-
         def compileit():
             e = None
             birdeec.set_module_resolver(_module_resolver)
@@ -98,9 +99,10 @@ class Compiler:
                     else:
                         return None
                 else:
-                    target_path = find_module_path(modname,".bdm")
+                    root=os.path.join(root_path, source_root_path)
+                    target_path = find_module_path(root, modname,".bdm")
                     if not target_path:
-                        target_path = find_module_path(modname,".txt")
+                        target_path = find_module_path(root, modname,".txt")
                     if target_path:
                         dependencies.append((tmod, target_path))
                     else:
@@ -211,6 +213,18 @@ completions_for_array=[
                     CompletionItem('length', kind=CompletionItemKind.Function),
                 ]
 
+def get_completion_for_new(ty: birdeec.ResolvedType) -> CompletionList:
+    if ty.index_level>0:
+        return None
+    detail = ty.get_detail()
+    if isinstance(detail, birdeec.ClassAST):
+        ret=[]
+        def eachfunc(idx, length, field: birdeec.MemberFunctionDef):
+            nonlocal ret
+            ret.append(CompletionItem(field.decl.proto.name, kind=CompletionItemKind.Function))
+        bdutils.foreach_method(detail,eachfunc)
+        return CompletionList(False, ret)
+
 def get_completion_for_type(ty: birdeec.ResolvedType) -> CompletionList:
     if ty.index_level>0:
         return CompletionList(False, completions_for_array)
@@ -239,7 +253,79 @@ primitive_types=[
                     CompletionItem('pointer', kind=CompletionItemKind.Class),
                 ]
 
-@server.feature(COMPLETION, trigger_characters=[' ', '.'])
+def get_module_metadata(mod)-> dict:
+    tmod = tuple(mod)
+    with compiler:
+        if tmod in compiler.module_metadata:
+            return json.loads(compiler.module_metadata[tmod])
+    target=find_module_path(os.path.join(root_path, cache_path), mod, ".bmm")
+    BIRDEE_HOME=os.environ['BIRDEE_HOME']
+    if not target and BIRDEE_HOME:
+        target=find_module_path(os.path.join(BIRDEE_HOME, "blib"), mod, ".bmm")
+    if target:
+        with open(target) as f:
+            return json.load(f)
+
+def get_completion_for_name_import(modname: str)-> CompletionList:
+    if modname.endswith(':'):
+        modname=modname[:-1]
+    meta=get_module_metadata(modname.split("."))
+    if meta:
+        ret=[]
+        for clz in meta["Classes"]:
+            ret.append(CompletionItem(clz["name"], CompletionItemKind.Class))
+        for var in meta["Variables"]:
+            ret.append(CompletionItem(var["name"], CompletionItemKind.Variable))
+        for var in meta["Functions"]:
+            ret.append(CompletionItem(var["name"], CompletionItemKind.Function))        
+        for var in meta["FunctionTemplates"]:
+            if "name" in var:
+                ret.append(CompletionItem(var["name"], CompletionItemKind.Function))
+        for var in meta["FunctionTypes"]:
+            ret.append(CompletionItem(var["name"], CompletionItemKind.Function))
+        return CompletionList(False, ret) 
+
+def array_starts_with(large, small):
+    if len(large)<len(small):
+        return False
+    for i, itm in enumerate(small):
+        if large[i]!=itm:
+            return False
+    return True
+
+def get_completion_for_import(importcode: str)-> CompletionList:
+    if importcode.endswith('.'):
+        importcode=importcode[:-1]
+    mod=importcode.split(".")
+    CompletionItemKindFolder=19
+    ret=dict()
+    with compiler:
+        for cmod in compiler.module_metadata:
+            if array_starts_with(cmod, mod):
+                if len(cmod)>=len(mod):
+                    name=cmod[len(mod)]
+                    if name not in ret:
+                        ret[name]=CompletionItem(name, 
+                            CompletionItemKind.Module if len(cmod)==len(mod)+1 else CompletionItemKindFolder)
+    def find_next_in_directory(root: str, ext: str):
+        path=os.path.join(root, *mod)
+        _, dirnames, filenames = next(os.walk(path), (None, [], []))
+        for name in dirnames:
+            if not name.startswith(".") and name not in ret:
+                ret[name]=CompletionItem(name, CompletionItemKindFolder)
+        for fname in filenames:
+            if fname.endswith(ext):
+                name=fname[:-len(ext)]
+                if name not in ret:
+                    ret[name]=CompletionItem(name, CompletionItemKind.Module)
+    find_next_in_directory(os.path.join(source_root_path, cache_path), ".bmm")
+    find_next_in_directory(source_root_path, ".bdm")
+    BIRDEE_HOME=os.environ['BIRDEE_HOME']
+    if BIRDEE_HOME:
+        find_next_in_directory(os.path.join(BIRDEE_HOME, "blib"), ".bmm")
+    return CompletionList(False, list(ret.values()))
+
+@server.feature(COMPLETION, trigger_characters=[' ', '.', ":"])
 def completions(params: CompletionParams):
     #bybass a bug (?) of pygls 
     if not hasattr(params.context, 'triggerKind'):
@@ -249,6 +335,9 @@ def completions(params: CompletionParams):
             t: Document = txt[params.textDocument.uri]
             pos = params.position.character
             istr = t.source.split('\n')[params.position.line]
+            stripped= istr[:pos+1]
+            if stripped.startswith("import "):
+                return get_completion_for_import("")
             if istr[pos-3:pos+1]=="as " or istr[pos-4:pos+1]=="new ":
                     with compiler:
                         compiler.switch_to_last_successful(params.textDocument.uri)
@@ -257,11 +346,18 @@ def completions(params: CompletionParams):
                     cls_completion = [CompletionItem(name) for name in class_names]
                     func_completion = [CompletionItem(name, kind=CompletionItemKind.Function) for name in functype_names]
                     return CompletionList(False, primitive_types + cls_completion + func_completion)
-        if params.context.triggerCharacter=='.':
+        if params.context.triggerCharacter=='.' or params.context.triggerCharacter==':':
             t: Document = txt[params.textDocument.uri]
             pos = params.position.character
             line = params.position.line
             istr = t.lines
+            stripped = istr[line][:pos+1].strip()
+            if stripped.startswith("import "):
+                importcode=stripped[len("import "):]
+                if params.context.triggerCharacter=='.':
+                    return get_completion_for_import(importcode)
+                else:
+                    return get_completion_for_name_import(importcode)
             istr[line]= istr[line][:pos] + ":" + istr[line][pos:]
             src="\n".join(istr)
             expr=None
@@ -269,7 +365,10 @@ def completions(params: CompletionParams):
                 compiler.compile(params.textDocument.uri, src)
                 expr=birdeec.get_auto_completion_ast()
             if expr:
-                return get_completion_for_type(expr.resolved_type)
+                if expr.kind == birdeec.AutoCompletionExprAST.CompletionKind.NEW:
+                    return get_completion_for_new(expr.resolved_type)
+                else:
+                    return get_completion_for_type(expr.resolved_type)
     return None
 
 @server.feature(DEFINITION)
