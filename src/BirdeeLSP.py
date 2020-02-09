@@ -239,8 +239,33 @@ def get_completion_for_type(ty: birdeec.ResolvedType) -> CompletionList:
             nonlocal ret
             ret.append(CompletionItem(field.decl.proto.name, kind=CompletionItemKind.Function))
         bdutils.foreach_method(detail,eachfunc)
-
         return CompletionList(False, ret)
+    if isinstance(detail, birdeec.ImportTree):
+        ret=[]
+        sub = detail.get_submodules()
+        if len(sub)!=0:
+            for name in sub:
+                ret.append(CompletionItem(name, CompletionItemKind.Module))
+        else:
+            modu: birdeec.ImportedModule = detail.mod
+            for name in modu.get_classmap():
+                ret.append(CompletionItem(name, CompletionItemKind.Class))
+            for name in modu.get_dimmap():
+                ret.append(CompletionItem(name, CompletionItemKind.Variable))
+            for name in modu.get_funcmap():
+                ret.append(CompletionItem(name, CompletionItemKind.Function))             
+            for name in modu.get_functypemap():
+                ret.append(CompletionItem(name, CompletionItemKind.Class))
+
+            for name in modu.get_imported_classmap():
+                ret.append(CompletionItem(name, CompletionItemKind.Class))
+            for name in modu.get_imported_dimmap():
+                ret.append(CompletionItem(name, CompletionItemKind.Variable))
+            for name in modu.get_imported_funcmap():
+                ret.append(CompletionItem(name, CompletionItemKind.Function))             
+            for name in modu.get_imported_functypemap():
+                ret.append(CompletionItem(name, CompletionItemKind.Class))
+        return CompletionList(False, ret)            
 
 primitive_types=[
                     CompletionItem('byte', kind=CompletionItemKind.Class),
