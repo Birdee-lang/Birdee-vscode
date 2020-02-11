@@ -6,6 +6,8 @@
 	"engines": {
 		"vscode": "^1.41.0"
 	},
+	"publisher": "Birdee-lang",
+	"repository": "https://github.com/Birdee-lang/Birdee2",
 	"languageServerExample.trace.server": "verbose",
 	"categories": [
 		"Other"
@@ -27,7 +29,7 @@
 			{
 				"language": "Birdee",
 				"scopeName": "source.birdee",
-				"path": "./src/syntax.json",
+				"path": "./lsp/syntax.json",
 				"embeddedLanguages": {
 					"meta.embedded.block.python": "python"
 				}

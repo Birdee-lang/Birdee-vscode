@@ -17,7 +17,7 @@ let client: LanguageClient;
 export function activate(context: ExtensionContext) {
 
   // The server is implemented in another project and outputted there
-  let serverCommand = context.asAbsolutePath(path.join('src', 'BirdeeLSP.py'));
+  let serverCommand = context.asAbsolutePath(path.join('lsp', 'BirdeeLSP.py'));
   console.log(serverCommand);
   let compilerPath: string = workspace.getConfiguration("birdeeLanguageServer").get<string>("compilerPath")!;
   let cachePath: string = workspace.getConfiguration("birdeeLanguageServer").get<string>("lspCache")!;
