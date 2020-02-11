@@ -156,7 +156,7 @@ compiler = Compiler()
 
 
 
-def find_ast_by_pos(pos: Position):
+def find_ast_by_pos(pos: Position, line_length: int):
     tl = birdeec.get_top_level()
     res=[]
     def runfunc(ast: birdeec.StatementAST):
@@ -164,12 +164,21 @@ def find_ast_by_pos(pos: Position):
             return
         if ast.pos.line == pos.line + 1 and ast.pos.pos >= pos.character + 1:
             res.append((ast.pos.pos - pos.character - 1, ast))
+        if ast.pos.line == pos.line + 2 and ast.pos.pos == 1:
+            res.append((line_length - pos.character - 1, ast)) 
+            #Birdee compiler marks the end of the expression, maybe in the next line
         ast.run(runfunc)
-    toplevel=[] #list of (line distance, stmt)
-    for a in tl:
-        toplevel.append((abs(a.pos.line - pos.line -1), a))
-    for a in sorted(toplevel, key = lambda x: x[0])[0: 4]: #get nearest 4 toplevel stmt, sorted by line
-        runfunc(a[1]) # run into the AST to find the specific statement
+    have_candidate=False
+    for idx, a in enumerate(tl):
+        if a.pos.line >=  pos.line:
+            if idx>0: runfunc(tl[idx-1])
+            if idx>1: runfunc(tl[idx-2])
+            runfunc(tl[idx])
+            if idx+1 < len(tl): runfunc(tl[idx+1])
+            have_candidate=True
+            break
+    if not have_candidate:
+        runfunc(tl[len(tl)-1])
     return sorted(res,  key=lambda x: x[0])
 
 def sourcepos2position(pos: birdeec.SourcePos, main_src_uri: str) -> (Position, str):
@@ -188,12 +197,12 @@ def get_member_def_pos(mem: birdeec.MemberExprAST) -> birdeec.SourcePos:
         return mem.imported_func.pos
     return None  
 
-def get_def(uri, istr, pos: Position)-> (Position, str):
+def get_def(uri, istr, pos: Position, line_length: int)-> (Position, str):
     ret=None
     with compiler:
         if not compiler.compile(uri, istr):
             return ret
-        asts=find_ast_by_pos(pos)
+        asts=find_ast_by_pos(pos, line_length)
         for ast in asts:
             impl=ast[1]
             if isinstance(impl, birdeec.LocalVarExprAST):
@@ -399,7 +408,8 @@ def completions(params: CompletionParams):
 @server.feature(DEFINITION)
 def definitions(params: TextDocumentPositionParams):
     uri=params.textDocument.uri
-    r, outuri=get_def(uri, txt[uri].source, params.position)
+    line_length = len(txt[uri].lines[params.position.line])
+    r, outuri=get_def(uri, txt[uri].source, params.position, line_length)
     if r:
         return Location(outuri, Range(
             r, Position(r.line, r.character+1)
