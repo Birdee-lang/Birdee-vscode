@@ -216,6 +216,23 @@ def get_def(uri, istr, pos: Position, line_length: int)-> (Position, str):
                 break	
     return ret
 
+def get_signature_help(expr: birdeec.AutoCompletionExprAST):
+    rty: birdeec.ResolvedType = expr.resolved_type
+    if rty.base==birdeec.BasicType.FUNC and rty.index_level==0:
+        proto: birdeec.PrototypeAST = rty.get_detail()
+        label = "function " + proto.name + "("
+        cur_len=len(label)
+        param_label_pos=[]
+        param_label=[]
+        for arg in proto.args:
+            appender = "{} as {}".format(arg.name, arg.resolved_type)
+            param_label.append(appender)
+            param_label_pos.append((cur_len, cur_len + len(appender)))
+            cur_len += len(appender) + 2 # 2 for ", "
+        label = "{}{}) as {}".format(label, ", ".join(param_label), proto.return_type)
+        parameters = [ParameterInformation(lab) for lab in param_label]
+        return SignatureHelp([SignatureInformation(label, parameters=parameters)], 
+            active_parameter=expr.parameter_number)
 
 completions_for_array=[
                     CompletionItem('get_raw', kind=CompletionItemKind.Function),
@@ -403,6 +420,23 @@ def completions(params: CompletionParams):
                     return get_completion_for_new(expr.resolved_type)
                 else:
                     return get_completion_for_type(expr.resolved_type)
+    return None
+
+@server.feature(SIGNATURE_HELP, trigger_characters=['(', ','], retrigger_characters = [','])
+def signature_help(params: TextDocumentPositionParams):
+    t: Document = txt[params.textDocument.uri]
+    pos = params.position.character
+    line = params.position.line
+    istr = t.lines
+    istr[line]= istr[line][:pos] + ":" + istr[line][pos:]
+    src="\n".join(istr)
+    expr=None
+    with compiler:
+        compiler.compile(params.textDocument.uri, src)
+        expr=birdeec.get_auto_completion_ast()
+    if expr:
+        if expr.kind == birdeec.AutoCompletionExprAST.CompletionKind.PARAMETER:
+            return get_signature_help(expr)
     return None
 
 @server.feature(DEFINITION)
