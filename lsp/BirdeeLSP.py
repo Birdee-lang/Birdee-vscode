@@ -389,7 +389,7 @@ def completions(params: CompletionParams):
             stripped= istr[:pos+1]
             if stripped.startswith("import "):
                 return get_completion_for_import("")
-            if istr[pos-3:pos+1]=="as " or istr[pos-4:pos+1]=="new ":
+            if istr[pos-3:pos]=="as " or istr[pos-4:pos]=="new ":
                     with compiler:
                         compiler.switch_to_last_successful(params.textDocument.uri)
                     class_names = list(birdeec.get_classes(True).keys()) + list(birdeec.get_classes(False).keys())
