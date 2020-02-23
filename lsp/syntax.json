@@ -50,7 +50,7 @@
         ]
       },
       "control": {
-        "match": "\\b(?:if|then|else|end|while|for|import|package|as|continue|break|to|till|try|catch|throw|defer|new)\\b",
+        "match": "\\b(?:if|then|else|end|while|for|import|package|as|continue|break|to|till|try|catch|throw|defer|new|return)\\b",
         "name": "keyword.control.birdee"
       },
       "storage": {

@@ -2,10 +2,12 @@
 	"name": "birdee",
 	"displayName": "Birdee",
 	"description": "Birdee language",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"engines": {
 		"vscode": "^1.41.0"
 	},
+	"publisher": "Birdee-lang",
+	"repository": "https://github.com/Birdee-lang/Birdee2",
 	"languageServerExample.trace.server": "verbose",
 	"categories": [
 		"Other"
@@ -27,7 +29,7 @@
 			{
 				"language": "Birdee",
 				"scopeName": "source.birdee",
-				"path": "./src/syntax.json",
+				"path": "./lsp/syntax.json",
 				"embeddedLanguages": {
 					"meta.embedded.block.python": "python"
 				}
@@ -56,6 +58,16 @@
 					"type": "string",
 					"default": "",
 					"description": "The path of Birdee compiler"
+				},
+				"birdeeLanguageServer.sourceRoot": {
+					"type": "string",
+					"default": ".",
+					"description": "Root path of the source code in a workspace"
+				},
+				"birdeeLanguageServer.lspCache": {
+					"type": "string",
+					"default": ".BirdeeCache",
+					"description": "The directory to store the LSP cache in a workspace"
 				}
 			}
 		}
