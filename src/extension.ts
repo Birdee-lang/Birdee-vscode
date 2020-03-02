@@ -18,12 +18,19 @@ export function activate(context: ExtensionContext) {
 
   // The server is implemented in another project and outputted there
   let serverCommand = context.asAbsolutePath(path.join('lsp', 'BirdeeLSP.py'));
+  
   console.log(serverCommand);
   let compilerPath: string = workspace.getConfiguration("birdeeLanguageServer").get<string>("compilerPath")!;
   let cachePath: string = workspace.getConfiguration("birdeeLanguageServer").get<string>("lspCache")!;
-  cachePath = path.join(workspace.workspaceFolders![0].uri.fsPath, cachePath);
   console.log("Compiler=" + compilerPath);
   console.log("Cache=" + cachePath);
+  let curFolderPath: string = "";
+  if (workspace.workspaceFolders === undefined) {
+    curFolderPath = path.dirname(workspace.textDocuments![0].uri.fsPath);
+  } else {
+    curFolderPath = workspace.workspaceFolders![0].uri.fsPath;
+  }
+  cachePath = path.join(curFolderPath, cachePath);
 
   if (compilerPath === "") {
     compilerPath = process.env["BIRDEE_HOME"] + "/bin/birdeec";
